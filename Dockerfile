@@ -7,7 +7,7 @@ FROM python:3.11-slim
 
 # Metadata
 LABEL maintainer="loveoplay2023-hue"
-LABEL description="API REST Bourse de Casablanca — FastAPI + BeautifulSoup4"
+LABEL description="API REST Bourse de Casablanca — FastAPI + requests + BeautifulSoup4"
 LABEL version="1.0.0"
 
 # Environment variables
@@ -18,11 +18,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (curl pour healthcheck, gcc pour compiler certains wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    libxml2-dev \
-    libxslt-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
