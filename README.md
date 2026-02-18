@@ -28,7 +28,7 @@
 
 ## Description
 
-`bourse-casa-api` est une API REST complète qui scrape en temps réel les données de la **Bourse de Casablanca (BVC)** à partir du site officiel [casablanca-bourse.com](https://www.casablanca-bourse.com).
+`bourse-casa-api` est une API REST complète qui scrape en temps réel les données de la **Bourse de Casablanca (BVC)** via les APIs internes de [casablanca-bourse.com](https://www.casablanca-bourse.com).
 
 Contrairement aux API payantes, cette solution est entièrement **gratuite, illimitée et auto-hébergée**.
 
@@ -38,8 +38,7 @@ Contrairement aux API payantes, cette solution est entièrement **gratuite, illi
 |-----------|-------------|
 | Framework API | FastAPI 0.109 |
 | Serveur ASGI | Uvicorn |
-| Scraping | BeautifulSoup4 + lxml |
-| Cache | Redis 7 |
+| HTTP Client | requests 2.31 + urllib3 |
 | Conteneurisation | Docker + Docker Compose |
 | CI/CD | GitHub Actions |
 | Python | 3.11 |
@@ -48,10 +47,11 @@ Contrairement aux API payantes, cette solution est entièrement **gratuite, illi
 
 ## Fonctionnalités
 
-- **Cours en temps réel** : Prix, variation, volume de toutes les actions cotées
-- **Indices boursiers** : MASI, MADEX et sous-indices sectoriels
-- **Informations sociétés** : Secteur, capital, ISIN, dividendes
-- **Top actives** : Les N actions les plus actives par volume
+- **Marché live** : Prix, variation, volume, capitalisation de toutes les actions cotées
+- **Résumé du marché** : Nombre de hausses / baisses / stables, volume total
+- **Indices boursiers** : MASI, MSI20, MASI ESG et sous-indices sectoriels
+- **Top Gainers / Losers** : Les N actions les plus performantes ou les plus en baisse
+- **Top Actifs** : Les N actions les plus actives par volume
 - **Historique OHLCV** : Open/High/Low/Close/Volume sur une période donnée
 - **Health check** : Endpoint de monitoring
 - **Documentation interactive** : Swagger UI intégrée (`/docs`)
@@ -62,14 +62,16 @@ Contrairement aux API payantes, cette solution est entièrement **gratuite, illi
 
 ```
 bourse-casa-api/
-├── main.py              # Application FastAPI + routes
-├── scraper.py           # Moteur de scraping BeautifulSoup4
-├── requirements.txt     # Dépendances Python
-├── Dockerfile           # Image Docker Python 3.11 slim
-├── docker-compose.yml   # Stack complète (API + Redis + Nginx)
+├── main.py                    # Application FastAPI + routes
+├── scraper.py                 # Moteur de scraping (APIs BVC)
+├── requirements.txt           # Dépendances Python
+├── Dockerfile                 # Image Docker Python 3.11 slim
+├── docker-compose.yml         # Stack complète (API + Redis + Nginx)
+├── tests/
+│   └── test_main.py           # Tests unitaires FastAPI
 └── .github/
     └── workflows/
-        └── deploy.yml   # CI/CD : Tests + Build + Sécurité
+        └── deploy.yml         # CI/CD : Tests + Build + Sécurité
 ```
 
 ---
@@ -122,56 +124,58 @@ Documentation ReDoc : **http://localhost:8000/redoc**
 
 ## Endpoints API
 
-### Marché général
+### Info & Résumé
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| GET | `/api/v1/market` | Vue d'ensemble du marché |
-| GET | `/api/v1/quotes` | Tous les cours en temps réel |
-| GET | `/api/v1/quotes/{ticker}` | Cours d'une action spécifique |
+| GET | `/` | Info générale + liste des endpoints |
+| GET | `/health` | Health check |
+| GET | `/docs` | Swagger UI |
+| GET | `/redoc` | Documentation ReDoc |
+
+### Marché Live
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/market` | Toutes les actions cotées en temps réel |
+| GET | `/api/v1/market/summary` | Résumé du marché (hausse/baisse/volume total) |
+| GET | `/api/v1/stocks/{ticker}` | Données d'une action par ticker (ex: `IAM`, `ATW`) |
 
 ### Indices
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| GET | `/api/v1/indices` | Tous les indices (MASI, MADEX...) |
-| GET | `/api/v1/indices/{index_name}` | Valeur d'un indice spécifique |
+| GET | `/api/v1/indices` | Tous les indices (MASI, MSI20, MASI ESG, sectoriels) |
+| GET | `/api/v1/indices/{code}` | Valeur d'un indice spécifique (ex: `MASI`, `MSI20`) |
 
-### Sociétés
-
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/api/v1/companies` | Liste de toutes les sociétés |
-| GET | `/api/v1/companies/{ticker}` | Détails d'une société |
-
-### Statistiques
+### Top Listes
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| GET | `/api/v1/most-active` | Top actions par volume |
-| GET | `/api/v1/historical/{ticker}` | Historique OHLCV |
+| GET | `/api/v1/top/gainers?limit=10` | Top N actions en hausse |
+| GET | `/api/v1/top/losers?limit=10` | Top N actions en baisse |
+| GET | `/api/v1/top/active?limit=10` | Top N actions les plus actives par volume |
 
-### Système
+### Historique
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/docs` | Swagger UI |
+| GET | `/api/v1/historical/{ticker}?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD` | Historique OHLCV |
 
-### Exemple de réponse
+### Exemple de réponse — action
 
 ```json
 {
   "ticker": "ATW",
   "name": "Attijariwafa Bank",
-  "price": 485.00,
-  "change": 2.50,
-  "change_pct": 0.52,
-  "volume": 125430,
+  "sector": "Banques",
+  "last_price": 485.00,
+  "variation_pct": 0.52,
+  "volume": 125430.00,
   "open": 482.00,
   "high": 487.00,
   "low": 481.00,
-  "timestamp": "2026-02-18T22:00:00"
+  "capitalisation": 86700000000.0
 }
 ```
 
@@ -223,7 +227,7 @@ Les contributions sont les bienvenues !
 
 1. Forkez le projet
 2. Créez votre branche (`git checkout -b feature/ma-fonctionnalite`)
-3. Commitez vos changements (`git commit -m 'Add: ma fonctionnalité'`)
+3. Commitez vos changements (`git commit -m 'feat: ma fonctionnalité'`)
 4. Pushez vers la branche (`git push origin feature/ma-fonctionnalite`)
 5. Ouvrez une Pull Request
 
@@ -231,8 +235,8 @@ Les contributions sont les bienvenues !
 
 ## Licence
 
-MIT License — Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+MIT License — libre d'utilisation pour usage personnel et éducatif.
 
 ---
 
-> **Note** : Ce projet est destiné à un usage personnel et éducatif. Respectez les conditions d'utilisation du site de la Bourse de Casablanca.
+> **Note** : Ce projet utilise les APIs publiques du site de la Bourse de Casablanca. Respectez les conditions d'utilisation du site.
